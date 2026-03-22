@@ -1,0 +1,7 @@
+---
+- name: restart node_exporter
+  systemd:
+    name: node_exporter
+    state: restarted
+  become: yes
+  ignore_errors: yes

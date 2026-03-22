@@ -1,0 +1,12 @@
+---
+# Apply common hardening to all hosts
+- hosts: webservers
+  gather_facts: yes
+  roles:
+    - common
+
+# Apply monitoring to monitoring group
+- hosts: monitoring
+  gather_facts: yes
+  roles:
+    - monitoring

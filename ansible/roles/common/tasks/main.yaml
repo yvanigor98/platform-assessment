@@ -1,0 +1,77 @@
+---
+- name: Update apt cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+  become: yes
+
+- name: Create non-root deploy user
+  user:
+    name: deploy
+    shell: /bin/bash
+    create_home: yes
+    state: present
+  become: yes
+
+- name: Add deploy user to sudoers
+  lineinfile:
+    path: /etc/sudoers
+    line: "deploy ALL=(ALL) NOPASSWD:ALL"
+    validate: "visudo -cf %s"
+    state: present
+  become: yes
+
+- name: Disable root SSH login
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "^PermitRootLogin"
+    line: "PermitRootLogin no"
+    state: present
+  become: yes
+  notify: restart sshd
+
+- name: Install tzdata
+  apt:
+    name: tzdata
+    state: present
+  become: yes
+
+- name: Set timezone to Africa/Kigali
+  timezone:
+    name: Africa/Kigali
+  become: yes
+
+- name: Configure system limits
+  pam_limits:
+    domain: "*"
+    limit_type: soft
+    limit_item: nofile
+    value: "65536"
+  become: yes
+
+- name: Install ufw
+  apt:
+    name: ufw
+    state: present
+  become: yes
+
+- name: Configure UFW default deny incoming
+  ufw:
+    default: deny
+    direction: incoming
+  become: yes
+  when: ansible_virtualization_type != "docker"
+
+- name: Configure UFW allow SSH
+  ufw:
+    rule: allow
+    port: "2222"
+    proto: tcp
+  become: yes
+  when: ansible_virtualization_type != "docker"
+
+- name: Enable UFW
+  ufw:
+    state: enabled
+  become: yes
+  when: ansible_virtualization_type != "docker"

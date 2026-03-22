@@ -1,0 +1,14 @@
+all:
+  children:
+    webservers:
+      hosts:
+        ansible-target:
+          ansible_host: "{{ lookup('env', 'ANSIBLE_TARGET_HOST') | default('127.0.0.1', true) }}"
+          ansible_port: 2222
+          ansible_user: deploy
+          ansible_password: deploy123
+          ansible_sudo_pass: deploy123
+          ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
+    monitoring:
+      hosts:
+        ansible-target:
