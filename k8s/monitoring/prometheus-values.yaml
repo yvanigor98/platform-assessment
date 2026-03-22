@@ -1,0 +1,88 @@
+prometheus:
+  prometheusSpec:
+    # Scrape interval - how often Prometheus collects metrics
+    scrapeInterval: 15s
+    evaluationInterval: 15s
+
+    # Tell Prometheus to look for scrape annotations on pods
+    podMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorSelectorNilUsesHelmValues: false
+
+    additionalScrapeConfigs:
+      # Scrape our platform-app pods via Prometheus annotations
+      - job_name: "platform-app"
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels:
+              [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: "true"
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels:
+              [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+
+    # Alert rule - fire if pod is unready for more than 2 minutes
+    additionalPrometheusRulesMap:
+      platform-alerts:
+        groups:
+          - name: platform.rules
+            rules:
+              - alert: PodNotReady
+                expr: kube_pod_status_ready{condition="true"} == 0
+                for: 2m
+                labels:
+                  severity: critical
+                annotations:
+                  summary: "Pod {{ $labels.pod }} has been unready for more than 2 minutes"
+
+grafana:
+  adminPassword: "platform-admin"
+
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: "default"
+          folder: "Platform"
+          type: file
+          options:
+            path: /var/lib/grafana/dashboards/default
+
+  # Default dashboard showing HTTP request count and pod CPU
+  dashboards:
+    default:
+      platform-app:
+        json: |
+          {
+            "title": "Platform App Dashboard",
+            "panels": [
+              {
+                "title": "HTTP Request Rate",
+                "type": "graph",
+                "targets": [
+                  {
+                    "expr": "rate(http_requests_total[5m])",
+                    "legendFormat": "{{method}} {{route}}"
+                  }
+                ]
+              },
+              {
+                "title": "Pod CPU Usage",
+                "type": "graph",
+                "targets": [
+                  {
+                    "expr": "rate(container_cpu_usage_seconds_total{container='app'}[5m])",
+                    "legendFormat": "{{pod}}"
+                  }
+                ]
+              }
+            ]
+          }
