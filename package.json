@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "@aws-cdk/lambda-layer-kubectl-v29": "^2.1.1"
+  }
+}
