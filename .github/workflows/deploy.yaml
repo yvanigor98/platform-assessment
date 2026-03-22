@@ -1,0 +1,45 @@
+name: Deploy Pipeline
+
+# Trigger only on push to main after CI passes
+on:
+  workflow_run:
+    workflows: ["CI Pipeline"]
+    types:
+      - completed
+    branches: [main]
+
+jobs:
+  deploy:
+    name: Deploy to Kubernetes
+    runs-on: ubuntu-latest
+    # Only deploy if CI pipeline succeeded
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+
+    steps:
+      # Checkout the repository code
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Configure kubectl with cluster credentials from secrets
+      - name: Configure kubectl
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBECONFIG }}" > $HOME/.kube/config
+
+      # Update the deployment with the new image
+      - name: Update Kubernetes deployment
+        run: |
+          kubectl set image deployment/platform-app \
+            app=${{ secrets.DOCKERHUB_USERNAME }}/platform-app:${{ github.sha }}
+
+      # Wait for rollout to complete successfully
+      - name: Verify deployment rollout
+        run: |
+          kubectl rollout status deployment/platform-app --timeout=120s
+
+      # If deployment fails, automatically roll back to previous version
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          kubectl rollout undo deployment/platform-app
+          echo "Deployment failed - rolled back to previous version"
