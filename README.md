@@ -90,12 +90,27 @@ This repository contains a production-like platform for a Node.js application bu
 
 ---
 
+## Port Reference
+
+| Service               | Local Port | Standard Port | Notes                                                                                                               |
+| --------------------- | ---------- | ------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Node.js app           | 3000       | 3000          | Standard Node.js port, no conflict                                                                                  |
+| Grafana               | 3001       | 80            | Port 80 is used inside the cluster, we forward to 3001 locally to avoid conflicts with other services               |
+| Prometheus            | 9090       | 9090          | Access via `kubectl port-forward svc/monitoring-kube-prometheus-prometheus 9090:9090 -n monitoring`                 |
+| Node Exporter         | 9100       | 9100          | Exposes host metrics, scraped by Prometheus                                                                         |
+| Loki                  | 3100       | 3100          | Log aggregation, configured as Grafana datasource                                                                   |
+| Local Docker Registry | 5001       | 5000          | Port 5000 was occupied by an existing service (CKAN data portal) on this machine, so we used 5001 as an alternative |
+| Ansible SSH target    | 2222       | 22            | Port 22 is the standard SSH port, we map to 2222 on the host to avoid conflicts with the host's own SSH service     |
+| kind Kubernetes API   | 6443       | 6443          | Standard Kubernetes API server port                                                                                 |
+
+> **Note:** Port conflicts are common in local development. The ports above reflect what was used during development. When deploying to production (EKS), standard ports apply without conflicts since each service runs in its own isolated environment.
+
 ## Local Setup Guide
 
 ### 1. Clone the repository
 
 ```bash
-git clone <your-repo-url>
+git clone <repo-url>
 cd platform-assessment
 ```
 
@@ -233,6 +248,24 @@ No AWS account was used. `cdk synth` generates valid CloudFormation templates co
 
 **Local registry vs ECR**
 For local development we use a local Docker registry. In production this is replaced by the ECR repository provisioned by the CDK EcrStack.
+
+**RemovalPolicy: DESTROY on ECR repository**
+The ECR repository uses `RemovalPolicy.DESTROY` so it gets cleaned up when the stack is torn down. In production this should be `RETAIN` to protect Docker images from accidental deletion during infrastructure changes.
+
+**Single NAT gateway**
+We provision one NAT gateway across both availability zones to reduce cost. In production you would have one NAT gateway per AZ so that if one AZ goes down, the other AZ's private subnets can still reach the internet independently.
+
+**imagePullPolicy: Never in Kubernetes manifests**
+The deployment uses `imagePullPolicy: Never` because kind loads images directly from the local Docker daemon. In production pointing at ECR this would be removed — Kubernetes would pull images from ECR using the IAM role we provisioned in EksStack.
+
+**ClusterIP Service type**
+The Service uses ClusterIP instead of LoadBalancer because traffic enters through the Ingress controller. This is the correct production pattern — LoadBalancer creates a cloud load balancer per service which is expensive and unnecessary when an Ingress handles routing.
+
+**Alpine base image**
+We use `node:18-alpine` instead of `node:18` as the base image. Alpine Linux is ~5MB vs ~900MB for the full image, significantly reducing attack surface and pull times. The trade-off is that Alpine uses musl libc instead of glibc which can occasionally cause compatibility issues with native Node.js modules.
+
+**defaultCapacity: 0 in EksStack**
+We set `defaultCapacity: 0` to prevent CDK from creating a default node group, then define our own with precise control over instance type, min/max size, and IAM role. This is cleaner than modifying a default group after the fact.
 
 ---
 
