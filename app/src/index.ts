@@ -1,5 +1,18 @@
 import express from 'express';
 import { register, Counter, Histogram, collectDefaultMetrics } from 'prom-client';
+import winston from 'winston';
+
+// Structured JSON logger
+const logger = winston.createLogger({
+  level: 'info',
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.json()
+  ),
+  transports: [
+    new winston.transports.Console()
+  ]
+});
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -31,12 +44,20 @@ app.use((req, res, next) => {
       status: res.statusCode,
     });
     end({ method: req.method, route: req.path, status: res.statusCode });
+    // Structured JSON log for every request
+    logger.info('HTTP Request', {
+      method: req.method,
+      route: req.path,
+      status: res.statusCode,
+      duration_ms: Date.now(),
+    });
   });
   next();
 });
 
 // Route 1 - main endpoint
 app.get('/', (req, res) => {
+  logger.info('Root endpoint called');
   res.json({ message: 'Hello from Platform Engineer!' });
 });
 
@@ -53,4 +74,5 @@ app.get('/metrics', async (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  logger.info(`Server started`, { port: PORT });
 });
